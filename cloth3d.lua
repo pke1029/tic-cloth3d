@@ -119,7 +119,7 @@ time = {
 	end,
 
 	draw = function(self)
-		print(self.fps, 228, 1, 15, true)
+		print(self.fps, 228, 1, 10, true)
 	end
 
 }
@@ -208,14 +208,20 @@ vec3d = {
 			end,
 
 			rotate = function(self, ax, ay, az)
+				local cx = cos(ax)
+				local sx = sin(ax)
+				local cy = cos(ay)
+				local sy = sin(ay)
+				local cz = cos(az)
+				local sz = sin(az)
 				local x1 = self[1]
-				local y1 = self[2] * cos(ax) - self[3] * sin(ax)
-				local z1 = self[2] * sin(ax) + self[3] * cos(ax)
-				local x2 = x1 * cos(ay) + z1 * sin(ay)
+				local y1 = self[2] * cx - self[3] * sx
+				local z1 = self[2] * sx + self[3] * cx
+				local x2 = x1 * cy + z1 * sy
 				local y2 = y1
-				local z2 = -x1 * sin(ay) + z1 * cos(ay)
-				self[1] = x2 * cos(az) - y2 * sin(az)
-				self[2] = x2 * sin(az) + y2 * cos(az)
+				local z2 = -x1 * sy + z1 * cy
+				self[1] = x2 * cz - y2 * sz
+				self[2] = x2 * sz + y2 * cz
 				self[3] = z2
 				return self
 			end,
@@ -231,6 +237,11 @@ vec3d = {
 				self[2] = v[2]
 				self[3] = v[3]
 				return self
+			end,
+
+			draw_highlight = function(self, x0, y0)
+				local x, y = self:proj(camera)
+				circb(x+x0, y+y0, 2, 10)
 			end,
 		}
 	},
@@ -298,6 +309,8 @@ camera = {
 	o = vec3d.new(0, 0, 100),
 	x = vec3d.new(1, 0, 0),
 	y = vec3d.new(0, 1, 0),
+	ax = -0.5,
+	ay = 0.5,
 	depth = 80,
 	persective = true,
 
@@ -308,8 +321,16 @@ camera = {
 	end,
 
 	update = function(self)
-		-- rotate 
-		if mouse.middle or mouse.right then 
+		
+		if mouse.md then
+			-- rotate (turn table)
+			self.ax = mathFun.clamp(self.ax - 0.03*mouse.dy, -PI/2, PI/2)
+			self.ay = self.ay - 0.03*mouse.dx
+			self.o = vec3d.new(0, 0, 100):rotate(self.ax, self.ay, 0)
+			self.x = vec3d.new(1, 0, 0):rotate(0, self.ay, 0)
+			self.y = vec3d.new(0, 1, 0):rotate(self.ax, self.ay, 0)
+		elseif mouse.right then 
+			-- rotate (track ball)
 			local u = - mouse.dy*self.x - mouse.dx*self.y
 			local theta = vec3d.norm(u) * 0.03
 			if theta ~= 0 then 
@@ -318,7 +339,8 @@ camera = {
 				self.y:qrotate(theta, u)
 			end
 		end
-		-- controls
+
+		-- reset camera
 		if keyp(27) then
 			self.o = vec3d.new(0, 0, 100)
 			self.x = vec3d.new(1, 0, 0)
@@ -326,6 +348,8 @@ camera = {
 			self.o:rotate(-0.5, 0.5, 0)
 			self.x:rotate(-0.5, 0.5, 0)
 			self.y:rotate(-0.5, 0.5, 0)
+			self.ax = -0.5
+			self.ay = 0.5
 		end
 		if keyp(32) then
 			self.persective = not self.persective
@@ -392,19 +416,18 @@ light = {
 				self.y = vec3d.new(0,1,0):rotate(self.ax, 0, self.az)
 			end,
 
+			brightness = function(self, n, a, b)
+				local x = self.s * vec3d.dot(n, self.y)
+				x = mathFun.clamp(x, 0, 1)
+				return mathFun.maprange(x, 0, 1, a, b) + 0.5
+			end,
+
 			draw = function(self)
 
-			end
+			end,
 
 		}
-
-	},
-
-	brightness = function(n, light, a, b)
-		local x = light.s * vec3d.dot(n, light.y)
-		x = mathFun.clamp(x, 0, 1)
-		return mathFun.maprange(x, 0, 1, a, b) + 0.5
-	end,
+	}
 
 }
 
@@ -437,26 +460,15 @@ face = {
 				tri(x2+x0, y2+y0, x3+x0, y3+y0, x4+x0, y4+y0, self.col)
 			end,
 
+			-- gouraud shading
 			cdraw = function(self, x0, y0)
 				local x1, y1 = self[1]:proj(camera)
 				local x2, y2 = self[2]:proj(camera)
 				local x3, y3 = self[3]:proj(camera)
 				local x4, y4 = self[4]:proj(camera)
-				x1 = floor(x1)
-				x2 = floor(x2)
-				x3 = floor(x3)
-				x4 = floor(x4)
-				y1 = floor(y1)
-				y2 = floor(y2)
-				y3 = floor(y3)
-				y4 = floor(y4)
 				local vc = self.vc
-				local v1 = vec3d.new(x1+x0, y1+y0, vc[1])
-				local v2 = vec3d.new(x2+x0, y2+y0, vc[2])
-				local v3 = vec3d.new(x3+x0, y3+y0, vc[3])
-				local v4 = vec3d.new(x4+x0, y4+y0, vc[4])
-				face.ctri(v1, v2, v3)
-				face.ctri(v2, v3, v4)
+				textri(x1+x0, y1+y0, x2+x0, y2+y0, x3+x0, y3+y0, vc[1], 0, vc[2], 0, vc[3], 0)
+				textri(x2+x0, y2+y0, x3+x0, y3+y0, x4+x0, y4+y0, vc[2], 0, vc[3], 0, vc[4], 0)
 			end
 
 		}
@@ -477,74 +489,6 @@ face = {
 			end 
 		end
 		return n:normalise()
-	end,
-
-	cline = function(y, x1, x2, c1, c2)
-		x1 = floor(x1)
-		x2 = floor(x2)
-		local m = (c2-c1)/(x2-x1)
-		local a = c1 
-		for i = x1,x2 do
-			pix(i, y, a)
-			a = a + m
-		end
-	end,
-
-	ttri = function(v1, v2, v3)
-		local m1 = (v2[1] - v1[1]) / (v2[2] - v1[2])
-		local m2 = (v3[1] - v1[1]) / (v3[2] - v1[2])
-		local m3 = (v2[3] - v1[3]) / (v2[2] - v1[2])
-		local m4 = (v3[3] - v1[3]) / (v3[2] - v1[2])
-		local a = v1[1]+0.5
-		local b = v1[1]+0.5
-		local c = v1[3]
-		local d = v1[3]
-		for i = v1[2],v2[2] do
-			if a < b then face.cline(i, a, b, c, d) end
-			if a > b then face.cline(i, b, a, d, c) end
-			a = a + m1 
-			b = b + m2
-			c = c + m3
-			d = d + m4
-		end
-	end,
-
-	btri = function(v1, v2, v3)
-		local m1 = (v3[1] - v1[1]) / (v3[2] - v1[2])
-		local m2 = (v3[1] - v2[1]) / (v3[2] - v2[2])
-		local m3 = (v3[3] - v1[3]) / (v3[2] - v1[2])
-		local m4 = (v3[3] - v2[3]) / (v3[2] - v2[2])
-		local a = v3[1] + 0.5
-		local b = v3[1] + 0.5
-		local c = v3[3]
-		local d = v3[3]
-		for i = v3[2],v1[2],-1 do
-			if a < b then face.cline(i, a, b, c, d) end
-			if a > b then face.cline(i, b, a, d, c) end
-			a = a - m1 
-			b = b - m2
-			c = c - m3
-			d = d - m4
-		end
-	end,
-
-	ctri = function(v1, v2, v3)
-		local verts = {v1, v2, v3}
-		table.sort(verts, vec3d.ysort)
-		v1 = verts[1]
-		v2 = verts[2]
-		v3 = verts[3]
-		local a = (v2[2]-v1[2])/(v3[2]-v1[2])
-		local x4 = a*v3[1] + (1-a)*v1[1]
-		local c4 = a*v3[3] + (1-a)*v1[3]
-		local v4 = vec3d.new(x4, v2[2], c4)
-		if v2[1] < v4[1] then 
-			face.ttri(v1, v2, v4)
-			face.btri(v2, v4, v3) 
-		else 
-			face.ttri(v1, v4, v2)
-			face.btri(v4, v2, v3)
-		end
 	end,
 
 }
@@ -590,6 +534,16 @@ sphere = {
 			draw = function(self, x0, y0)
 				local x, y, r = self:proj(camera)
 				circ(x+x0, y+y0, r-1, self.col)
+			end,
+
+			draw_wire = function(self, x0, y0)
+				local x, y, r = self:proj(camera)
+				circb(x+x0, y+y0, r-1, self.col)
+			end,
+
+			draw_highlight = function(self, x0, y0)
+				local x, y, r = self:proj(camera)
+				circb(x+x0, y+y0, r-1, 10)
 			end,
 
 			ortho_proj = function(self, camera)
@@ -753,7 +707,7 @@ cloth = {
 	k3 = 0,	    -- Bending
 	damping = 0.5,
 	dt = 1/10,
-	shading = 1,
+	shading = 2,
 
 	new_lattice = function(w, h, x)
 		local verts = {}
@@ -776,7 +730,7 @@ cloth = {
 
 			draw = function(self)
 				if cloth.shading == 1 then
-					self:show_verts()
+					self:draw_wire()
 				elseif cloth.shading == 2 then
 					self:draw_occlude()
 				elseif cloth.shading == 3 then
@@ -786,8 +740,8 @@ cloth = {
 				end
 			end,
 
-			show_verts = function(self)
-				cloth.collision:draw()
+			draw_wire = function(self)
+				cloth.collision:draw_wire()
 				local verts = self.verts
 				local n, m = verts:size()
 				for i = 1,n do
@@ -822,7 +776,7 @@ cloth = {
 				for i = 1,n-1 do
 					for j = 1,m-1 do 
 						local f = face.new(verts[i][j], verts[i][j+1], verts[i+1][j], verts[i+1][j+1])
-						f.col = light.brightness(f.n, cloth.light, 4, 8)
+						f.col = cloth.light:brightness(f.n, 4, 8)
 						table.insert(faces, f)
 					end
 				end
@@ -860,7 +814,7 @@ cloth = {
 				for i = 1,n do
 					vcols[i] = {}
 					for j = 1,m do 
-						vcols[i][j] = light.brightness(vnormals[i][j], cloth.light, 4, 8)
+						vcols[i][j] = cloth.light:brightness(vnormals[i][j], 4, 8)
 					end
 				end
 				for i = 1,n-1 do
@@ -918,7 +872,10 @@ cloth = {
 				end
 				F = F + cloth.gravity*vec3d.new(0,-1,0)
 				F = F - cloth.damping*(verts-self.vold)/cloth.dt
-				if self.pin ~= nil then F = self.pin * F end
+				if self.pin ~= nil then 
+					F = self.pin * F 
+					self.vold = self.pin*self.vold + (-1*self.pin+1)*self.verts
+				end
 				-- verlet intergration
 				F = 2*self.verts - self.vold + 0.5*cloth.dt^2*F
 				self.vold = self.verts
@@ -972,9 +929,111 @@ cloth = {
 			self.sphere:draw(H2, H2)
 		end,
 
+		draw_wire = function(self)
+			self.sphere:draw_wire(H2, H2)
+		end,
+
 	},
 
 	light = light.new()
+
+}
+
+grab = {
+
+	current = nil,
+
+	update = function(self)
+
+		-- controls
+		if mouse.md or mouse.right then
+			if self.current ~= nil then
+				local u = mouse.dx * camera.x - mouse.dy * camera.y
+				if self.current == cloth.collision.sphere then 
+					local d = 0.0125*vec3d.dist(self.current.o, camera.o)
+					self.current.o = self.current.o + d*u 
+				else
+					local i = self.current.i
+					local j = self.current.j
+					c1.verts[i][j] = c1.verts[i][j] + 0.0125*self.current.d*u 
+					c1.pin[i][j] = 0
+				end
+			end
+			return
+		elseif mouse.mu then
+			if self.current ~= cloth.collision.sphere and self.current ~= nil then
+				local i = self.current.i
+				local j = self.current.j
+				c1.pin[i][j] = 1
+			end
+		end
+
+		-- selection
+		self.current = nil
+		local x, y, r = cloth.collision.sphere:proj(camera)
+		local x = mouse.x - H2 - x
+		local y = mouse.y - H2 - y
+		if sqrt(x^2 + y^2) < r then
+			self.current = cloth.collision.sphere
+			return
+		end
+		local n, m = c1.verts:size()
+		local verts = {}
+		for i = 1,n do
+			for j = 1,m do
+				table.insert(verts, {i=i, j=j, d=vec3d.dist(c1.verts[i][j], camera.o)})
+			end
+		end
+		table.sort(verts, function(a, b) return a.d < b.d end)
+		for i,v in ipairs(verts) do
+			x, y = c1.verts[v.i][v.j]:proj(camera)
+			x = mouse.x - H2 - x 
+			y = mouse.y - H2 - y
+			if sqrt(x^2 + y^2) < 5 then
+				self.current = v
+				return
+			end
+		end
+
+	end,
+
+	draw = function(self)
+		if self.current ~= nil then 
+			if self.current == cloth.collision.sphere then
+				self.current:draw_highlight(H2, H2)
+			else
+				c1.verts[self.current.i][self.current.j]:draw_highlight(H2, H2)
+			end 
+		end
+	end
+
+}
+
+cut = {
+
+	seq = {},
+
+	update = function(self)
+
+	end,
+
+	draw = function(self)
+
+	end,
+
+	tstript = function(pos, col)
+		local n = #pos
+		for i = 1,n-2 do
+			tri(pos[i][1], pos[i][2], pos[i+1][1], pos[i+1][2], pos[i+2][1], pos[i+2][2], col)
+		end
+	end,
+
+	lstript = function(pos, col)
+		local n = #pos
+		for i = 1,n do
+			line(pos[i][1], pos[i][2], pos[i+1][1], pos[i+1][2], col)
+		end
+	end,
 
 }
 
@@ -1021,6 +1080,7 @@ ui = {
 	y2 = 77,
 	y3 = 150,
 	y4 = 119,
+	y5 = 150,
 
 	load = function(self)
 		ui.header.new('Physics', self.y1)
@@ -1034,17 +1094,9 @@ ui = {
 		l3 = ui.slider.new('Strength', 0, 2, 1, self.y2+8)
 		l1 = ui.slider.new('Rotate x', -PI, PI, cloth.light.ax, self.y2+19)
 		l2 = ui.slider.new('Rotate z', -PI, PI, cloth.light.az, self.y2+30)
-		ui.header.new('Material', self.y3)
-		s1 = ui.rgb.new('Background', 11, self.y3+8)
-		s6 = ui.slider.new('Cloth diff.', 0, 1, 1, self.y3+23)
-		s2 = ui.rgb.new('Cloth dark', 4, self.y3+34)
-		s3 = ui.rgb.new('Cloth light', 8, self.y3+49)
-		s7 = ui.slider.new('Ball diffuse', 0, 1, 1, self.y3+64)
-		s4 = ui.rgb.new('Ball dark', 9, self.y3+75)
-		s5 = ui.rgb.new('Ball light', 10, self.y3+90)
 		ui.header.new('Shading', self.y4)
-		b1 = ui.button.new('Simple', 0, self.y4+8, true)
-		b2 = ui.button.new('Occlude', 52, self.y4+8)
+		b1 = ui.button.new('Wire', 0, self.y4+8)
+		b2 = ui.button.new('Occlude', 52, self.y4+8, true)
 		b3 = ui.button.new('Flat', 0, self.y4+19)
 		b4 = ui.button.new('Smooth', 52, self.y4+19, false, 1)
 		b1.click = function() cloth.shading = 1 end
@@ -1053,6 +1105,11 @@ ui = {
 		b4.click = function() cloth.shading = 4 end
 		-- s1 = ui.slider.new('DOF', 60, 200, camera.depth, self.y2+8)
 		-- s2 = ui.slider.new('Distance', 50, 200, vec3d.norm(camera.o), self.y2+19)
+		-- ui.header.new('Interact', self.y5)
+		-- c1 = ui.button.new('rotate', 0, self.y5+8)
+		-- c2 = ui.button.new('grab', 52, self.y5+8)
+		-- c3 = ui.button.new('cut', 0, self.y5+19)
+		-- c4 = ui.button.new('throw', 52, self.y5+19)
 	end,
 
 	update = function(self)
@@ -1090,16 +1147,6 @@ ui = {
 		cloth.light.s = l3.val
 		cloth.light.ax = l1.val
 		cloth.light.az = l2.val 
-		color.set(color.new(s1.r.val, s1.g.val, s1.b.val), s1.col)
-		local c1 = color.new(s2.r.val, s2.g.val, s2.b.val)
-		local c2 = color.new(s3.r.val, s3.g.val, s3.b.val)
-		color.set(c1, s2.col)
-		color.set(color.interp(0.75, c1, c2), 5)
-		color.set(color.interp(0.5, c1, c2), 6)
-		color.set(color.interp(0.25, c1, c2), 7)
-		color.set(c2, s3.col)
-		color.set(color.new(s4.r.val, s4.g.val, s4.b.val), s4.col)
-		color.set(color.new(s5.r.val, s5.g.val, s5.b.val), s5.col)
 		b1.val = cloth.shading == 1
 		b2.val = cloth.shading == 2
 		b3.val = cloth.shading == 3
@@ -1186,40 +1233,6 @@ ui = {
 
 	},
 
-	rgb = {
-
-		new = function(text, col, y)
-			local addr = color.addr+3*col
-			local r = ui.slider.new(nil, 0, 255, peek(addr), 0)
-			r.bbox = bbox.new(ui.x0+1, y+7, 33, 7)
-			r.col = 1
-			local g = ui.slider.new(nil, 0, 255, peek(addr+1), 0)
-			g.bbox = bbox.new(ui.x0+35, y+7, 33, 7)
-			g.col = 2
-			local b = ui.slider.new(nil, 0, 255, peek(addr+2), 0)
-			b.bbox = bbox.new(ui.x0+69, y+7, 33, 7)
-			b.col = 3
-			local v = {text=text, bbox={x=ui.x0+3, y=y}, col=col, r=r, g=g, b=b}
-			setmetatable(v, ui.rgb.mt)
-			table.insert(ui.objects, v)
-			return v
-		end,
-
-		mt = {
-
-			__index = {
-
-				draw = function(self)
-					print(self.text, self.bbox.x, self.bbox.y, 13)
-					rect(216, self.bbox.y, 21, 6, self.col)
-				end,
-
-			}
-
-		}
-
-	},
-
 	button = {
 
 		new = function(text, x, y, val, col)
@@ -1283,15 +1296,19 @@ function TIC()
 	--update
 	time:update()
 	mouse:update()
-	camera:update()
 	ui:update()
 	-- cloth.collision:update()
 	cloth.light:update()
 	c1:update()
+	if mouse.x < HEIGHT then
+		-- camera:update()
+		grab:update()
+	end
 
 	--draw
 	cls(11)
 	c1:draw()
+	grab:draw()
 	ui:draw()
 	axes:draw()
 
@@ -1302,7 +1319,12 @@ function TIC()
 
 end
 
+-- <TILES>
+-- 000:0000456700000000000000000000000000000000000000000000000000000000
+-- 001:8000000000000000000000000000000000000000000000000000000000000000
+-- </TILES>
+
 -- <PALETTE>
--- 000:1a1c2cb13e5338b76441a6f624245d44444466666688888881ceeeb13e53ee99ae1a1c2cf4f4f494b0c2566c86333c57
+-- 000:1a1c2cb13e5338b76441a6f624245d3b4e815279a569a3c981ceeeb13e53ffcd751a1c2cf4f4f494b0c2566c86333c57
 -- </PALETTE>
 
