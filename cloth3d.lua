@@ -59,6 +59,34 @@ mathFun = {
 
 }
 
+stack = {
+
+	new = function(n)
+		local t = {n=n}
+		for i = 1,n do
+			table.insert(t, nil)
+		end
+		setmetatable(t, stack.mt)
+		return t
+	end,
+
+	mt = {
+
+		__index = {
+
+			push = function(self, a)
+				for i = 1,self.n-1 do
+					self[i] = self[i+1]
+				end
+				self[self.n] = a 
+			end
+
+		}
+
+	}
+
+}
+
 mouse = {
 
 	x = 120,
@@ -313,6 +341,7 @@ camera = {
 	ay = 0.5,
 	depth = 80,
 	persective = true,
+	r = 100,
 
 	load = function(self)
 		self.o:rotate(-0.5, 0.5, 0)
@@ -322,11 +351,16 @@ camera = {
 
 	update = function(self)
 		
+		if mouse.scroll ~= 0 then
+			self.r = mathFun.clamp(self.r - 4*mouse.scroll, 80, 200)
+			self.o = self.r * self.o:normalise()
+		end
+
 		if mouse.md then
 			-- rotate (turn table)
 			self.ax = mathFun.clamp(self.ax - 0.03*mouse.dy, -PI/2, PI/2)
 			self.ay = self.ay - 0.03*mouse.dx
-			self.o = vec3d.new(0, 0, 100):rotate(self.ax, self.ay, 0)
+			self.o = vec3d.new(0, 0, self.r):rotate(self.ax, self.ay, 0)
 			self.x = vec3d.new(1, 0, 0):rotate(0, self.ay, 0)
 			self.y = vec3d.new(0, 1, 0):rotate(self.ax, self.ay, 0)
 		elseif mouse.right then 
@@ -350,6 +384,7 @@ camera = {
 			self.y:rotate(-0.5, 0.5, 0)
 			self.ax = -0.5
 			self.ay = 0.5
+			self.r = 100
 		end
 		if keyp(32) then
 			self.persective = not self.persective
@@ -417,6 +452,7 @@ light = {
 			end,
 
 			brightness = function(self, n, a, b)
+				if mathFun.isnan(n[1]) then return a end
 				local x = self.s * vec3d.dot(n, self.y)
 				x = mathFun.clamp(x, 0, 1)
 				return mathFun.maprange(x, 0, 1, a, b) + 0.5
@@ -744,10 +780,19 @@ cloth = {
 				cloth.collision:draw_wire()
 				local verts = self.verts
 				local n, m = verts:size()
-				for i = 1,n do
-					for j = 1,m do
-						if j ~= m then vec3d.line(H2, H2, verts[i][j], verts[i][j+1], camera, 12) end
-						if i ~= n then vec3d.line(H2, H2, verts[i][j], verts[i+1][j], camera, 12) end
+				if self.conn == nil then
+					for i = 1,n do
+						for j = 1,m do
+							if j ~= m then vec3d.line(H2, H2, verts[i][j], verts[i][j+1], camera, 12) end
+							if i ~= n then vec3d.line(H2, H2, verts[i][j], verts[i+1][j], camera, 12) end
+						end
+					end
+				else
+					for i = 1,n do
+						for j = 1,m do
+							if j ~= m and self.conn.hori[i][j] == 1 then vec3d.line(H2, H2, verts[i][j], verts[i][j+1], camera, 12) end
+							if i ~= n and self.conn.verti[i][j] == 1 then vec3d.line(H2, H2, verts[i][j], verts[i+1][j], camera, 12) end
+						end
 					end
 				end
 			end, 
@@ -756,10 +801,19 @@ cloth = {
 				local edges = {}
 				local verts = self.verts
 				local n, m = verts:size()
-				for i = 1,n do
-					for j = 1,m do
-						if j ~= m then table.insert(edges, edge.new(verts[i][j], verts[i][j+1])) end
-						if i ~= n then table.insert(edges, edge.new(verts[i][j], verts[i+1][j])) end
+				if self.conn == nil then
+					for i = 1,n do
+						for j = 1,m do
+							if j ~= m then table.insert(edges, edge.new(verts[i][j], verts[i][j+1])) end
+							if i ~= n then table.insert(edges, edge.new(verts[i][j], verts[i+1][j])) end
+						end
+					end
+				else
+					for i = 1,n do
+						for j = 1,m do
+							if j ~= m and self.conn.hori[i][j] == 1 then table.insert(edges, edge.new(verts[i][j], verts[i][j+1])) end
+							if i ~= n and self.conn.verti[i][j] == 1 then table.insert(edges, edge.new(verts[i][j], verts[i+1][j])) end
+						end
 					end
 				end
 				table.insert(edges, cloth.collision.sphere)
@@ -773,11 +827,23 @@ cloth = {
 				local faces = {}
 				local verts = self.verts
 				local n, m = verts:size()
-				for i = 1,n-1 do
-					for j = 1,m-1 do 
-						local f = face.new(verts[i][j], verts[i][j+1], verts[i+1][j], verts[i+1][j+1])
-						f.col = cloth.light:brightness(f.n, 4, 8)
-						table.insert(faces, f)
+				if self.conn == nil then
+					for i = 1,n-1 do
+						for j = 1,m-1 do 
+							local f = face.new(verts[i][j], verts[i][j+1], verts[i+1][j], verts[i+1][j+1])
+							f.col = cloth.light:brightness(f.n, 4, 8)
+							table.insert(faces, f)
+						end
+					end
+				else
+					for i = 1,n-1 do
+						for j = 1,m-1 do 
+							if self.conn.hori[i][j] == 1 and self.conn.verti[i][j] == 1 and self.conn.hori[i+1][j] == 1 and self.conn.verti[i][j+1] == 1 then
+								local f = face.new(verts[i][j], verts[i][j+1], verts[i+1][j], verts[i+1][j+1])
+								f.col = cloth.light:brightness(f.n, 4, 8)
+								table.insert(faces, f)
+							end
+						end
 					end
 				end
 				table.insert(faces, cloth.collision.sphere)
@@ -822,6 +888,18 @@ cloth = {
 						faces[(m-1)*(i-1)+j].vc = {vcols[i][j], vcols[i][j+1], vcols[i+1][j], vcols[i+1][j+1]} 
 					end
 				end
+				-- remove based on connectivity
+				if self.conn ~= nil then
+					local temp = {}
+					for i = 1,n-1 do
+						for j = 1,m-1 do 
+							if self.conn.hori[i][j] == 1 and self.conn.verti[i][j] == 1 and self.conn.hori[i+1][j] == 1 and self.conn.verti[i][j+1] == 1 then
+								table.insert(temp, faces[(m-1)*(i-1)+j])
+							end
+						end
+					end
+					faces = temp
+				end
 				-- rasterization
 				table.insert(faces, cloth.collision.sphere)
 				table.sort(faces, face.sort)
@@ -834,39 +912,88 @@ cloth = {
 				local verts = self.verts 
 				local n, m = verts:size()
 				local F = mat.new_const(vec3d.new(0,0,0), n, m)
-				for i = 1,n do
-					for j = 1,m do
-						local f
-						-- compression
-						if j ~= m then
-							f = cloth.hook(verts[i][j], verts[i][j+1], cloth.k1, cloth.l0)
-							F[i][j] = F[i][j] + f
-							F[i][j+1] = F[i][j+1] - f
+				if self.conn == nil then
+					for i = 1,n do
+						for j = 1,m do
+							local f
+							-- compression
+							if j ~= m then
+								f = cloth.hook(verts[i][j], verts[i][j+1], cloth.k1, cloth.l0)
+								F[i][j] = F[i][j] + f
+								F[i][j+1] = F[i][j+1] - f
+							end
+							if i ~= n then 
+								f = cloth.hook(verts[i][j], verts[i+1][j], cloth.k1, cloth.l0)
+								F[i][j] = F[i][j] + f
+								F[i+1][j] = F[i+1][j] - f
+							end
+							-- shear
+							if i ~= n and j ~= m then
+								f = cloth.hook(verts[i][j], verts[i+1][j+1], cloth.k2, sqrt2*cloth.l0)
+								F[i][j] = F[i][j] + f
+								F[i+1][j+1] = F[i+1][j+1] - f
+								f = cloth.hook(verts[i+1][j], verts[i][j+1], cloth.k2, sqrt2*cloth.l0)
+								F[i+1][j] = F[i+1][j] + f
+								F[i][j+1] = F[i][j+1] - f
+							end
+							-- bending 
+							if j < n-1 then
+								f = cloth.hook(verts[i][j], verts[i][j+2], cloth.k3, 2*cloth.l0)
+								F[i][j] = F[i][j] + f
+								F[i][j+2] = F[i][j+2] - f
+							end
+							if i < m-1 then
+								f = cloth.hook(verts[i][j], verts[i+2][j], cloth.k3, 2*cloth.l0)
+								F[i][j] = F[i][j] + f
+								F[i+2][j] = F[i+2][j] - f
+							end
 						end
-						if i ~= n then 
-							f = cloth.hook(verts[i][j], verts[i+1][j], cloth.k1, cloth.l0)
-							F[i][j] = F[i][j] + f
-							F[i+1][j] = F[i+1][j] - f
-						end
-						-- shear
-						if i ~= n and j ~= m then
-							f = cloth.hook(verts[i][j], verts[i+1][j+1], cloth.k2, sqrt2*cloth.l0)
-							F[i][j] = F[i][j] + f
-							F[i+1][j+1] = F[i+1][j+1] - f
-							f = cloth.hook(verts[i+1][j], verts[i][j+1], cloth.k2, sqrt2*cloth.l0)
-							F[i+1][j] = F[i+1][j] + f
-							F[i][j+1] = F[i][j+1] - f
-						end
-						-- bending 
-						if j < n-1 then
-							f = cloth.hook(verts[i][j], verts[i][j+2], cloth.k3, 2*cloth.l0)
-							F[i][j] = F[i][j] + f
-							F[i][j+2] = F[i][j+2] - f
-						end
-						if i < m-1 then
-							f = cloth.hook(verts[i][j], verts[i+2][j], cloth.k3, 2*cloth.l0)
-							F[i][j] = F[i][j] + f
-							F[i+2][j] = F[i+2][j] - f
+					end
+				else
+					for i = 1,n do
+						for j = 1,m do
+							local f
+							-- compression
+							if j ~= m then
+								if self.conn.hori[i][j] == 1 then
+									f = cloth.hook(verts[i][j], verts[i][j+1], cloth.k1, cloth.l0)
+									F[i][j] = F[i][j] + f
+									F[i][j+1] = F[i][j+1] - f
+								end
+							end
+							if i ~= n then 
+								if self.conn.verti[i][j] == 1 then
+									f = cloth.hook(verts[i][j], verts[i+1][j], cloth.k1, cloth.l0)
+									F[i][j] = F[i][j] + f
+									F[i+1][j] = F[i+1][j] - f
+								end
+							end
+							-- shear
+							if i ~= n and j ~= m then
+								if self.conn.hori[i][j] == 1 and self.conn.verti[i][j] == 1 and self.conn.hori[i+1][j] == 1 and self.conn.verti[i][j+1] == 1 then
+									f = cloth.hook(verts[i][j], verts[i+1][j+1], cloth.k2, sqrt2*cloth.l0)
+									F[i][j] = F[i][j] + f
+									F[i+1][j+1] = F[i+1][j+1] - f
+									f = cloth.hook(verts[i+1][j], verts[i][j+1], cloth.k2, sqrt2*cloth.l0)
+									F[i+1][j] = F[i+1][j] + f
+									F[i][j+1] = F[i][j+1] - f
+								end
+							end
+							-- bending 
+							if j < n-1 then
+								if self.conn.hori[i][j] == 1 and self.conn.hori[i][j+1] == 1 then
+									f = cloth.hook(verts[i][j], verts[i][j+2], cloth.k3, 2*cloth.l0)
+									F[i][j] = F[i][j] + f
+									F[i][j+2] = F[i][j+2] - f
+								end
+							end
+							if i < m-1 then
+								if self.conn.verti[i][j] == 1 and self.conn.verti[i+1][j] == 1 then
+									f = cloth.hook(verts[i][j], verts[i+2][j], cloth.k3, 2*cloth.l0)
+									F[i][j] = F[i][j] + f
+									F[i+2][j] = F[i+2][j] - f
+								end
+							end
 						end
 					end
 				end
@@ -889,6 +1016,12 @@ cloth = {
 							local n = u / r 
 							self.verts[i][j] = cloth.collision.sphere.r * n + cloth.collision.sphere.o
 						end
+					end
+				end
+				-- floor collision
+				for i = 1,n do
+					for j = 1,m do
+						if self.verts[i][j][2] < -200 then self.verts[i][j][2] = -200 end
 					end
 				end
 			end
@@ -914,6 +1047,23 @@ cloth = {
 		pin[n][1] = 0
 		pin[n][m] = 0
 		return pin 
+	end,
+
+	new_conn = function(verts)
+		local n, m = verts:size()
+		local hori = mat.new_const(1, n, m-1)
+		local verti = mat.new_const(1, n-1, m)
+		return {hori=hori, verti=verti}
+	end,
+
+	split_half = function(verts)
+		local n, m = verts:size()
+		local hori = mat.new_const(1, n, m-1)
+		local verti = mat.new_const(1, n-1, m)
+		for i = 1,n do
+			hori[i][5] = 0
+		end
+		return {hori=hori, verti=verti}
 	end,
 
 	collision = {
@@ -1011,29 +1161,115 @@ grab = {
 
 cut = {
 
-	seq = {},
+	trail = stack.new(8),
+	falloff = {0,1,1,1,2,2,2,1},
 
 	update = function(self)
-
+		-- controls
+		if mouse.md and mouse.x < HEIGHT then
+			self.trail:push({mouse.x, mouse.y})
+		else
+			self.trail:push(nil)
+		end
+		-- cutting
+		if c1.conn == nil then c1.conn = cloth.new_conn(c1.verts) end
+		if self.trail[7] == nil or self.trail[8] == nil then return end
+		local v1 = {self.trail[7][1] - H2, self.trail[7][2] - H2}
+		local v2 = {self.trail[8][1] - H2, self.trail[8][2] - H2}
+		local n,m = c1.verts:size()
+		for i = 1,n do
+			for j = 1,m-1 do
+				local x1, y1 = c1.verts[i][j]:proj(camera)
+				local x2, y2 = c1.verts[i][j+1]:proj(camera)
+				if self.isintersect(v1, v2, {x1, y1}, {x2, y2}) then
+					c1.conn.hori[i][j] = 0
+				end
+			end
+		end
+		for i = 1,n-1 do
+			for j = 1,m do
+				local x1, y1 = c1.verts[i][j]:proj(camera)
+				local x2, y2 = c1.verts[i+1][j]:proj(camera)
+				if self.isintersect(v1, v2, {x1, y1}, {x2, y2}) then
+					c1.conn.verti[i][j] = 0
+				end
+			end
+		end
 	end,
 
 	draw = function(self)
-
-	end,
-
-	tstript = function(pos, col)
-		local n = #pos
-		for i = 1,n-2 do
-			tri(pos[i][1], pos[i][2], pos[i+1][1], pos[i+1][2], pos[i+2][1], pos[i+2][2], col)
+		-- cut.lstript(self.trail, 10)
+		for i = 1,self.trail.n do
+			if self.trail[i] ~= nil then 
+				circ(self.trail[i][1], self.trail[i][2], self.falloff[i], 10)
+			end
+		end
+		for i = 1,self.trail.n-1 do
+			if self.trail[i] ~= nil and self.trail[i+1] ~= nil then
+				local u1 = self.trail[i][1]
+				local v1 = self.trail[i][2]
+				local u2 = self.trail[i+1][1]
+				local v2 = self.trail[i+1][2]
+				local x1, y1, x2, y2, x3, y3, x4, y4
+				if (u1 - u2) * (v1 - v2) < 0 then
+					x1 = u1 - self.falloff[i]
+					y1 = v1 - self.falloff[i]
+					x2 = u1 + self.falloff[i]
+					y2 = v1 + self.falloff[i]
+					x3 = u2 - self.falloff[i+1]
+					y3 = v2 - self.falloff[i+1]
+					x4 = u2 + self.falloff[i+1]
+					y4 = v2 + self.falloff[i+1]
+				else
+					x1 = u1 - self.falloff[i]
+					y1 = v1 + self.falloff[i]
+					x2 = u1 + self.falloff[i]
+					y2 = v1 - self.falloff[i]
+					x3 = u2 - self.falloff[i+1]
+					y3 = v2 + self.falloff[i+1]
+					x4 = u2 + self.falloff[i+1]
+					y4 = v2 - self.falloff[i+1]
+				end
+				tri(x1, y1, x2, y2, x3, y3, 11)
+				tri(x2, y2, x3, y3, x4, y4, 11)
+				line(x1, y1, x3, y3, 10)
+				line(x2, y2, x4, y4, 10)
+			end
 		end
 	end,
 
-	lstript = function(pos, col)
-		local n = #pos
+	lstript = function(trail, col)
+		local n = #trail
 		for i = 1,n do
-			line(pos[i][1], pos[i][2], pos[i+1][1], pos[i+1][2], col)
+			if trail[i] ~= nil and trail[i+1] ~= nil then 
+				line(trail[i][1], trail[i][2], trail[i+1][1], trail[i+1][2], col)
+			end
 		end
 	end,
+
+	isclockwise = function(x1, y1, x2, y2, x3, y3)
+		local a1 = x2 - x1
+		local a2 = y2 - y1
+		local b1 = x3 - x1
+		local b2 = y3 - y1
+		if (a1*b2 - b1*a2) < 0 then
+			return -1
+		else
+			return 1
+		end
+	end,
+
+	isintersect = function(v1, v2, v3, v4)
+		local a = cut.isclockwise(v1[1], v1[2], v3[1], v3[2], v4[1], v4[2]) 
+		local b = cut.isclockwise(v2[1], v2[2], v3[1], v3[2], v4[1], v4[2]) 
+		local c = cut.isclockwise(v1[1], v1[2], v2[1], v2[2], v3[1], v3[2]) 
+		local d = cut.isclockwise(v1[1], v1[2], v2[1], v2[2], v4[1], v4[2]) 
+		if a * b == -1 and c * d == -1 then
+			return true
+		else
+			return false
+		end
+	end
 
 }
 
@@ -1302,13 +1538,15 @@ function TIC()
 	c1:update()
 	if mouse.x < HEIGHT then
 		-- camera:update()
-		grab:update()
+		-- grab:update()
 	end
+	cut:update()
 
 	--draw
 	cls(11)
 	c1:draw()
 	grab:draw()
+	cut:draw()
 	ui:draw()
 	axes:draw()
 
