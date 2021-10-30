@@ -147,7 +147,7 @@ time = {
 	end,
 
 	draw = function(self)
-		print(self.fps, 228, 1, 10, true)
+		print(self.fps, 228, 1, 4, true)
 	end
 
 }
@@ -269,7 +269,7 @@ vec3d = {
 
 			draw_highlight = function(self, x0, y0)
 				local x, y = self:proj(camera)
-				circb(x+x0, y+y0, 2, 10)
+				circb(x+x0, y+y0, 2, 4)
 			end,
 		}
 	},
@@ -342,6 +342,7 @@ camera = {
 	depth = 80,
 	persective = true,
 	r = 100,
+	trackball = false,
 
 	load = function(self)
 		self.o:rotate(-0.5, 0.5, 0)
@@ -351,27 +352,51 @@ camera = {
 
 	update = function(self)
 		
-		if mouse.scroll ~= 0 then
-			self.r = mathFun.clamp(self.r - 4*mouse.scroll, 80, 200)
-			self.o = self.r * self.o:normalise()
+		if mouse.x < HEIGHT and cloth.operation == 1 then
+			if mouse.scroll ~= 0 then
+				self.r = mathFun.clamp(self.r - 4*mouse.scroll, 80, 200)
+				self.o = self.r * self.o:normalise()
+			end
+			if mouse.md then
+				-- rotate (turn table)
+				self.ax = mathFun.clamp(self.ax - 0.03*mouse.dy, -PI/2, PI/2)
+				self.ay = self.ay - 0.03*mouse.dx
+				self.trackball = false
+			elseif mouse.right then 
+				-- rotate (track ball)
+				local u = - mouse.dy*self.x - mouse.dx*self.y
+				local theta = vec3d.norm(u) * 0.03
+				if theta ~= 0 then 
+					self.o:qrotate(theta, u)
+					self.x:qrotate(theta, u)
+					self.y:qrotate(theta, u)
+				end
+				self.trackball = true
+			end
 		end
 
-		if mouse.md then
-			-- rotate (turn table)
-			self.ax = mathFun.clamp(self.ax - 0.03*mouse.dy, -PI/2, PI/2)
-			self.ay = self.ay - 0.03*mouse.dx
+		-- WASD control
+		if key(23) then 
+			self.ax = self.ax + 0.03 
+			self.trackball = false 
+		end
+		if key(19) then 
+			self.ax = self.ax - 0.03
+			self.trackball = false 
+		end
+		if key(1) then 
+			self.ay = self.ay + 0.03
+			self.trackball = false 
+		end
+		if key(4) then 
+			self.ay = self.ay - 0.03
+			self.trackball = false 
+		end
+
+		if self.trackball == false then
 			self.o = vec3d.new(0, 0, self.r):rotate(self.ax, self.ay, 0)
 			self.x = vec3d.new(1, 0, 0):rotate(0, self.ay, 0)
 			self.y = vec3d.new(0, 1, 0):rotate(self.ax, self.ay, 0)
-		elseif mouse.right then 
-			-- rotate (track ball)
-			local u = - mouse.dy*self.x - mouse.dx*self.y
-			local theta = vec3d.norm(u) * 0.03
-			if theta ~= 0 then 
-				self.o:qrotate(theta, u)
-				self.x:qrotate(theta, u)
-				self.y:qrotate(theta, u)
-			end
 		end
 
 		-- reset camera
@@ -436,8 +461,10 @@ edge = {
 
 light = {
 
-	new = function()
-		local a = {y=vec3d.new(0,1,0), ax=0, az=0, s=1}
+	new = function(ax, az)
+		if ax == nil then ax = 0 end
+		if az == nil then az = 0 end
+		local a = {y=vec3d.new(0,1,0), ax=ax, az=az, s=1}
 		setmetatable(a, light.mt)
 		return a
 	end,
@@ -492,8 +519,8 @@ face = {
 				local x2, y2 = self[2]:proj(camera)
 				local x3, y3 = self[3]:proj(camera)
 				local x4, y4 = self[4]:proj(camera)
-				tri(x1+x0, y1+y0, x2+x0, y2+y0, x3+x0, y3+y0, self.col)
-				tri(x2+x0, y2+y0, x3+x0, y3+y0, x4+x0, y4+y0, self.col)
+				tri(x1+x0, y1+y0, x2+x0, y2+y0, x3+x0, y3+y0, self.col+8)
+				tri(x2+x0, y2+y0, x3+x0, y3+y0, x4+x0, y4+y0, self.col+8)
 			end,
 
 			-- gouraud shading
@@ -534,9 +561,9 @@ axes = {
 	x = HEIGHT-16,
 	y = 15,
 
-	edges = {edge.new(vec3d.new(0, 0, 0), vec3d.new(8, 0, 0), 1),
-             edge.new(vec3d.new(0, 0, 0), vec3d.new(0, 8, 0), 2),
-             edge.new(vec3d.new(0, 0, 0), vec3d.new(0, 0, 8), 3)},
+	edges = {edge.new(vec3d.new(0, 0, 0), vec3d.new(8, 0, 0), 2),
+             edge.new(vec3d.new(0, 0, 0), vec3d.new(0, 8, 0), 6),
+             edge.new(vec3d.new(0, 0, 0), vec3d.new(0, 0, 8), 9)},
 
 	draw = function(self)
 		circ(self.x, self.y, 12, 15)
@@ -579,7 +606,7 @@ sphere = {
 
 			draw_highlight = function(self, x0, y0)
 				local x, y, r = self:proj(camera)
-				circb(x+x0, y+y0, r-1, 10)
+				circb(x+x0, y+y0, r-1, 4)
 			end,
 
 			ortho_proj = function(self, camera)
@@ -744,6 +771,7 @@ cloth = {
 	damping = 0.5,
 	dt = 1/10,
 	shading = 2,
+	operation = 2,
 
 	new_lattice = function(w, h, x)
 		local verts = {}
@@ -831,7 +859,7 @@ cloth = {
 					for i = 1,n-1 do
 						for j = 1,m-1 do 
 							local f = face.new(verts[i][j], verts[i][j+1], verts[i+1][j], verts[i+1][j+1])
-							f.col = cloth.light:brightness(f.n, 4, 8)
+							f.col = cloth.light:brightness(f.n, 0, 3)
 							table.insert(faces, f)
 						end
 					end
@@ -840,7 +868,7 @@ cloth = {
 						for j = 1,m-1 do 
 							if self.conn.hori[i][j] == 1 and self.conn.verti[i][j] == 1 and self.conn.hori[i+1][j] == 1 and self.conn.verti[i][j+1] == 1 then
 								local f = face.new(verts[i][j], verts[i][j+1], verts[i+1][j], verts[i+1][j+1])
-								f.col = cloth.light:brightness(f.n, 4, 8)
+								f.col = cloth.light:brightness(f.n, 0, 3)
 								table.insert(faces, f)
 							end
 						end
@@ -880,7 +908,7 @@ cloth = {
 				for i = 1,n do
 					vcols[i] = {}
 					for j = 1,m do 
-						vcols[i][j] = cloth.light:brightness(vnormals[i][j], 4, 8)
+						vcols[i][j] = cloth.light:brightness(vnormals[i][j], 0, 3)
 					end
 				end
 				for i = 1,n-1 do
@@ -1068,7 +1096,7 @@ cloth = {
 
 	collision = {
 
-		sphere = sphere.new(20, vec3d.new(1, -20, 2), 9),
+		sphere = sphere.new(20, vec3d.new(1, -20, 2), 2),
 
 		update = function(self)
 			local dx = mouse.dx*camera.x - mouse.dy*camera.y
@@ -1085,7 +1113,7 @@ cloth = {
 
 	},
 
-	light = light.new()
+	light = light.new(0.2, 0.1)
 
 }
 
@@ -1094,6 +1122,9 @@ grab = {
 	current = nil,
 
 	update = function(self)
+
+		if cloth.operation ~= 2 then return end
+		if mouse.x >= HEIGHT then return end
 
 		-- controls
 		if mouse.md or mouse.right then
@@ -1166,14 +1197,15 @@ cut = {
 
 	update = function(self)
 		-- controls
+		if cloth.operation ~= 3 then return end
 		if mouse.md and mouse.x < HEIGHT then
 			self.trail:push({mouse.x, mouse.y})
 		else
 			self.trail:push(nil)
 		end
 		-- cutting
-		if c1.conn == nil then c1.conn = cloth.new_conn(c1.verts) end
 		if self.trail[7] == nil or self.trail[8] == nil then return end
+		if c1.conn == nil then c1.conn = cloth.new_conn(c1.verts) end
 		local v1 = {self.trail[7][1] - H2, self.trail[7][2] - H2}
 		local v2 = {self.trail[8][1] - H2, self.trail[8][2] - H2}
 		local n,m = c1.verts:size()
@@ -1201,7 +1233,7 @@ cut = {
 		-- cut.lstript(self.trail, 10)
 		for i = 1,self.trail.n do
 			if self.trail[i] ~= nil then 
-				circ(self.trail[i][1], self.trail[i][2], self.falloff[i], 10)
+				circ(self.trail[i][1], self.trail[i][2], self.falloff[i], 4)
 			end
 		end
 		for i = 1,self.trail.n-1 do
@@ -1230,12 +1262,17 @@ cut = {
 					x4 = u2 + self.falloff[i+1]
 					y4 = v2 - self.falloff[i+1]
 				end
-				tri(x1, y1, x2, y2, x3, y3, 11)
-				tri(x2, y2, x3, y3, x4, y4, 11)
-				line(x1, y1, x3, y3, 10)
-				line(x2, y2, x4, y4, 10)
+				tri(x1, y1, x2, y2, x3, y3, 0)
+				tri(x2, y2, x3, y3, x4, y4, 0)
+				line(x1, y1, x3, y3, 4)
+				line(x2, y2, x4, y4, 4)
 			end
 		end
+		-- local n = self.trail.n 
+		-- if self.trail[n] ~= nil then
+		-- 	circ(self.trail[n][1], self.trail[n][2], self.falloff[n]+1, 11)
+		-- 	circb(self.trail[n][1], self.trail[n][2], self.falloff[n]+1, 10)
+		-- end
 	end,
 
 	lstript = function(trail, col)
@@ -1273,6 +1310,7 @@ cut = {
 
 }
 
+
 bbox = {
 
 	new = function(x, y, w, h)
@@ -1304,10 +1342,15 @@ bbox = {
 
 }
 
+function reset()
+	c1 = cloth.new_lattice(100, 100, vec3d.new(-50, 10, -50))
+	c1.pin = cloth.pin_corner(c1.verts)
+end
+
 ui = {
 
 	x0 = HEIGHT,
-	y0 = 0,
+	y0 = 1,
 	current = nil,
 	objects = {},
 	interactibles = {},
@@ -1315,8 +1358,9 @@ ui = {
 	y1 = 2,
 	y2 = 77,
 	y3 = 150,
-	y4 = 119,
-	y5 = 150,
+	y4 = 77,
+	y5 = 108,
+	y6 = 116,
 
 	load = function(self)
 		ui.header.new('Physics', self.y1)
@@ -1326,37 +1370,41 @@ ui = {
 		p4 = ui.slider.new('Shear', 0, 50, cloth.k2, self.y1+41)
 		p5 = ui.slider.new('Bending', 0, 50, cloth.k3, self.y1+52)
 		p6 = ui.slider.new('Damping', 0, 1, cloth.damping, self.y1+63)
-		ui.header.new('Light', self.y2)
-		l3 = ui.slider.new('Strength', 0, 2, 1, self.y2+8)
-		l1 = ui.slider.new('Rotate x', -PI, PI, cloth.light.ax, self.y2+19)
-		l2 = ui.slider.new('Rotate z', -PI, PI, cloth.light.az, self.y2+30)
+		-- ui.header.new('Light', self.y2)
+		-- l3 = ui.slider.new('Strength', 0, 2, 1, self.y2+8)
+		-- l1 = ui.slider.new('Rotate x', -PI, PI, cloth.light.ax, self.y2+19)
+		-- l2 = ui.slider.new('Rotate z', -PI, PI, cloth.light.az, self.y2+30)
 		ui.header.new('Shading', self.y4)
 		b1 = ui.button.new('Wire', 0, self.y4+8)
 		b2 = ui.button.new('Occlude', 52, self.y4+8, true)
 		b3 = ui.button.new('Flat', 0, self.y4+19)
-		b4 = ui.button.new('Smooth', 52, self.y4+19, false, 1)
+		b4 = ui.button.new('Smooth', 52, self.y4+19)
 		b1.click = function() cloth.shading = 1 end
 		b2.click = function() cloth.shading = 2 end
 		b3.click = function() cloth.shading = 3 end
 		b4.click = function() cloth.shading = 4 end
 		-- s1 = ui.slider.new('DOF', 60, 200, camera.depth, self.y2+8)
 		-- s2 = ui.slider.new('Distance', 50, 200, vec3d.norm(camera.o), self.y2+19)
-		-- ui.header.new('Interact', self.y5)
-		-- c1 = ui.button.new('rotate', 0, self.y5+8)
-		-- c2 = ui.button.new('grab', 52, self.y5+8)
-		-- c3 = ui.button.new('cut', 0, self.y5+19)
-		-- c4 = ui.button.new('throw', 52, self.y5+19)
+		ui.header.new('Interact', self.y5)
+		q1 = ui.button2.new(4, 23, self.y6)
+		q2 = ui.button2.new(5, 42, self.y6)
+		q3 = ui.button2.new(3, 61, self.y6)
+		q1.click = function() cloth.operation = 1 end
+		q2.click = function() cloth.operation = 2 end
+		q3.click = function() cloth.operation = 3 end
+		r1 = ui.button3.new()
+		r1.click = reset
 	end,
 
 	update = function(self)
 		-- scroll wheel
-		if mouse.scroll ~= nil and mouse.scroll ~= 0 then
-			if self.bbox:contain(mouse.x, mouse.y) then
-				for i,v in ipairs(ui.objects) do
-					v.bbox.y = v.bbox.y + mouse.scroll*6
-				end
-			end
-		end
+		-- if mouse.scroll ~= nil and mouse.scroll ~= 0 then
+		-- 	if self.bbox:contain(mouse.x, mouse.y) then
+		-- 		for i,v in ipairs(ui.objects) do
+		-- 			v.bbox.y = v.bbox.y + mouse.scroll*6
+		-- 		end
+		-- 	end
+		-- end
 		-- interactions
 		if not mouse.md or mouse.mp then
 			for i,v in ipairs(ui.interactibles) do
@@ -1380,15 +1428,22 @@ ui = {
 		cloth.k2 = p4.val
 		cloth.k3 = p5.val
 		cloth.damping = p6.val
-		cloth.light.s = l3.val
-		cloth.light.ax = l1.val
-		cloth.light.az = l2.val 
+		-- cloth.light.s = l3.val
+		-- cloth.light.ax = l1.val
+		-- cloth.light.az = l2.val 
 		b1.val = cloth.shading == 1
 		b2.val = cloth.shading == 2
 		b3.val = cloth.shading == 3
 		b4.val = cloth.shading == 4
 		-- camera.depth = s1.val
 		-- camera.o = s2.val * camera.o:normalise()
+		q1:detect()
+		q2:detect()
+		q3:detect()
+		q1.val = cloth.operation == 1
+		q2.val = cloth.operation == 2
+		q3.val = cloth.operation == 3
+		r1:detect()
 	end,
 
 	draw = function(self)
@@ -1508,6 +1563,97 @@ ui = {
 
 	},
 
+	button2 = {
+
+		new = function(spr, x, y, val)
+			if val == nil then val = false end
+			local b = {spr=spr, bbox=bbox.new(ui.x0+x+1, ui.y0+y, 16, 16), val=val, hover=false}
+			setmetatable(b, ui.button2.mt)
+			table.insert(ui.objects, b)
+			table.insert(ui.interactibles, b)
+			return b
+		end,
+
+		mt = {
+
+			__index = {
+
+				update = function(self)
+					if mouse.mp and type(self.click) == 'function' then
+						self:click()
+					end
+				end,
+
+				detect = function(self)
+					if self.bbox:contain(mouse.x, mouse.y) then
+						self.hover = true
+					else
+						self.hover = false
+					end
+				end,
+
+				draw = function(self, x0, y0)
+					local x, y, w, h = self.bbox:unpack()
+					if self.hover or self.val then
+						spr(48, x, y, 0, 1, 0, 0, 2, 2)
+						spr(self.spr, x+4, y+6, 0)
+					else
+						spr(16, x, y, 0, 1, 0, 0, 2, 2)
+						spr(self.spr, x+4, y+4, 0)
+					end
+					-- rect(x, y, 19, 19, 13)
+				end
+
+			}
+
+		}
+
+	},
+
+	button3 = {
+
+		new = function()
+			local b = {bbox=bbox.new(231, 127, 9, 9), hover=false}
+			setmetatable(b, ui.button3.mt)
+			table.insert(ui.objects, b)
+			table.insert(ui.interactibles, b)
+			return b
+		end,
+
+		mt = {
+
+			__index = {
+
+				update = function(self)
+					if mouse.mp and type(self.click) == 'function' then
+						self:click()
+					end
+				end,
+
+				detect = function(self)
+					if self.bbox:contain(mouse.x, mouse.y) then
+						self.hover = true
+					else
+						self.hover = false
+					end
+				end,
+
+				draw = function(self, x0, y0)
+					local x, y, w, h = self.bbox:unpack()
+					rect(x, y, 9, 9, 2)
+					if self.hover then
+						spr(2, 232, 128, 1)
+					else
+						spr(1, 232, 128, 0)
+					end
+				end
+
+			}
+
+		}
+
+	},
+
 	rprint = function(text, x, y, col, fixed)
 		local w = print(text, 0, -6, 0, fixed)
 		print(text, x-w, y, col, fixed)
@@ -1533,17 +1679,14 @@ function TIC()
 	time:update()
 	mouse:update()
 	ui:update()
-	-- cloth.collision:update()
 	cloth.light:update()
 	c1:update()
-	if mouse.x < HEIGHT then
-		-- camera:update()
-		-- grab:update()
-	end
+	camera:update()
+	grab:update()
 	cut:update()
 
 	--draw
-	cls(11)
+	cls(0)
 	c1:draw()
 	grab:draw()
 	cut:draw()
@@ -1558,11 +1701,27 @@ function TIC()
 end
 
 -- <TILES>
--- 000:0000456700000000000000000000000000000000000000000000000000000000
--- 001:8000000000000000000000000000000000000000000000000000000000000000
+-- 000:89abc00000000000000000000000000000000000000000000000000000000000
+-- 001:000c00000c0c0c00c00c00c0c00c00c0c00c00c00c000c0000ccc00000000000
+-- 002:111f11111f1f1f11f11f11f1f11f11f1f11f11f11f111f1111fff11111111111
+-- 003:c00000d0cc000dd0ccc0ddd00cccdd0000cfc0000fdccf00f0f0f0f0ff000ff0
+-- 004:00cccc000cddccc0ddffdcc0dffffcc00fffcccc0fffdccc00fffdc000000000
+-- 005:00dccccd00cccccc00dcccccdcdcccccccdccccccccccccc0ccccccd00cccdd0
+-- 016:00ffffff0feeeeeefdeeeeeefdeeeeeefdeeeeeefdeeeeeefdeeeeeefdeeeeee
+-- 017:ffffff00eeeeeef0eeeeeeffeeeeeeffeeeeeeffeeeeeeffeeeeeeffeeeeeeff
+-- 032:fdeeeeeefdeeeeeefdeeeeeefdeeeeeefdeeeeeefdffffffffffffffffffffff
+-- 033:eeeeeeffeeeeeeffeeeeeeffeeeeeeffeeeeeeffffffffffffffffffffffffff
+-- 048:0000000000000000ffffffffffffffffffeeeeeeffeeeeeeffeeeeeeffeeeeee
+-- 049:0000000000000000ffffffffffffffffeeeeeeffeeeeeeffeeeeeeffeeeeeeff
+-- 064:ffeeeeeeffeeeeeeffeeeeeeffeeeeeeffeeeeeeffeeeeeeffeeeeeeffffffff
+-- 065:eeeeeeffeeeeeeffeeeeeeffeeeeeeffeeeeeeffeeeeeeffeeeeeeffffffffff
 -- </TILES>
 
 -- <PALETTE>
--- 000:1a1c2cb13e5338b76441a6f624245d3b4e815279a569a3c981ceeeb13e53ffcd751a1c2cf4f4f494b0c2566c86333c57
+-- 000:1a1c2c5d275db13e53ef7d57ffcd75a7f07038b76425717929366f3b5dc941a6f673eff7f4f4f494b0c2566c86333c57
 -- </PALETTE>
+
+-- <COVER>
+-- 000:eed000007494648393160f00880077000012ffb0e45445353414055423e2033010000000129f40402000ff00c2000000000f0088007865c668a1c1c2ffdc5733c3754f4f4f837b461be335490b2cb3d59c00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000080ff001080c1840b0a1c388031a2c58c0b1a3c780132a4c9841b2a2c008133a6cd8c1b3a7cf80234a8c1942b4294b882356a410c295a0c6930d4acc9943b6adcb91045aecd9f0d5e04f920402ec1a44b8ecc108439e0809c3b02187a4040e358835b921c6914f52c40064bba7dfaa43c22df8657065d8a053a2005b761aa357bb61e2a4f9f358e7dbb87f8a8ddbb4936959ac63ea4d5b083eaa51c275e654caf39e6ed7c09f3eed20497fafdfb96b03163c78dde455c68ff6cc8c4a323f5ac508fe641d5553f164c07bde760d56b4bd6cbc7700aecda154734adeb32ede1ed537be63edb38b27fd4cb93e43e7c1936c5e4db6b3fbea7377a69e935024ffe0e3cb8fff1f4e70014ce8e94e7fde2ddb7971f5d77a97bb9ebeb7c5f30c08e75ddd39e1830fe925ff9f770827ffd04ff5188052880e18edd866f548a11e7af91080c5816d4700018165288452800e7830e000220802a86c020070a3850da850ab8f02d721a48fdd5863ad8916f722a08626f8f1298b329812a092092856938c0a1940529a2ea81327533ec84e1e8a4968c121834e88d3a7824218542a8a022954a1926a89b124815ad7106e8ee909c5eb912e09d5a88d3e79746a892639b42b897ec7056a9a6ea994959b6279b75c7a39f9082d828664d6a0a9b12aa292ab860ab6a3af824aa9e6a09e9759a5a5e52729e8a31d7a0a2972a27aaaeaa5e97a6a6a7fedaff6b12ba1029a6015afa2ca3ed56c3e884e96927287a2598b02f9c22ea9b2a72e574d6afae6669e1a69dbe081760ba4d0ba4a14032c876ac89ca2bcd1fab325b17209d5a4b0caf714e1a92d9870139c467bf7e7b73110549560253b5ea3b5d2d9142fb68a85c312946689a7aa8f42db5fe35ecd3a02ec98566975ab9c364ade6e9c263950b198c6a76fed5c0700f1317992daefa5c6be04d13a732775d27bc7b59c62b0b92bac862bc03f051276493796a2fcc0430deaa7cd3bd49371d4a5dca4f246f14564decc3f57f370d45faa34b37e4b8c5456d1573c3b297b4ff5b2f07c532d5213c6f6a5a5b7ddbe77f756ce091b9dee9b1bdced2179537d335edb114ffd3c9ebf325c7ee8940bcdd061e9d2e997e1e36e1cd2eb809f1c36bd6f13fdb775e81d1d25f7d00ff84c69960f6b6873e0abd9b721e80b6be46cb397969634d6677496d8ca93bdffec9622091932c91f2ea133ecdeee3731c67a1bf5a99da39686fadccf844b77da15ce0993cebeb9abb6c1662e8831e9d3ae70b6f587384733e9036d9976ee4b4f0df3fd736723bbde878d9252ff85afbcb8caefcef2374ae7e5fe3472f3ba0df2f23bb8ed9f042a63da9efad7b9bfa55de18d9ab99be418bfb302ffa27893306af0d310ce0ecb82786ba063f0d7af3fb1cccf642bff14075843bbb546238724cf98051832ca16ffcf7e0c1f8703152148c48ce5752cea550ff15832cb12e07a50131858d647fe262e00db214c6edecac68e39d1ff2d3af28655f604cd3ce5574171f31f98eac7ea30223f26852c40e51918ee3702c9c3757aee9996931eb9bdfe027f2223a2fe780b3e95a13a860c042703781dad7d88257cda8f01f01950b3e91c4e549b33ac0ff8a7312e609d8d6c88dde826d548b918417d842fdfe4f8e3c09910e9251a35aa1b86d3ba4a11f88fe9d1e4aa78023b79e70599a455a10409b6cb2e521b89348f8c2152f442acce2797bcc5a50139cb4cf9d76a6c2c86a03d58f51204235596d4d5223196cace5e027895332dc53359afbc5673d325b3066035a9ce4ebc5dee23e427a93718edc666d07376c107a8d8696ff49a0563dc98c4f7ed2d27654666629e434a8bdee256e94ee1e1d145cca98047b910d87ee2729daca7e1417747ae2a74f3aebbb39d13e707b882d4c2a31d08ef35f318c40664f99c93839e9ac44a31e132d73e4a62e6f849d51c6aa4b2a7ac08e23df86249010e4776c3ed5d4fb78db19ae488516429a28c4a239462e215a2f446e05538fbcaf4615b8d8364e8135716d0e482db8865842e56c98bc592545ba7f4b1eb27a7bec4ace424ae14aa69425a3057b66558a7e438e649d5afc6a8e5942c75ba24500a51d0cad3fb9dec8c6e39f98394c6059c98a4fb2931d950d80516356b6dbcef57b9b855967650bd6caba4632bfec2a0a453b31d36e9293ba1506ffea6deab4b3ce844b93ad7bec3b08b5d0ee02539fe17618d0b53258a6f982b731eda56f9befc8e107f1b3cdd4e3c8a580de091a206a4449422f4726c9a237b9b755caa9776b5055bdc5396135fcd8beab684e86fbcd971bc3aaeae8c3de7a53bda0451de6396b2dd43d153777e2dd9c7d74845eee5be265cb1e9d45da0fcf7696b1b04d796d6d6b9ddce6ee6b4df296d4cabbedd4a6a579b4dcdadf6f7ad850035713c5c5b61f541cb065a9e6942e6dc6ac616b8edadea79db7b54a48d66cecb59a6656b6e45134f6640dce1b46b5bf4312758bfa63632b07dbaf95255dfeaa836fb202fe9b366f659525756b5af791b9ac562d375caec2b466a53a099d4839ff086acc2b2358b04c4b55a853da9cc006463fa1d378628316eac158b24b2e31679dbca6e6bc068d28692c8b9903c86043c9bec22308e96f1b78e8c407c3318984b7a1d2d96f3ff520d42481a4938b996ab62a51db91d3fa914d3813bcb6ca3871a2e429ec25e45baafbcf766e0105295a653e493d9082e5389f7dcebbf160fe7a3ef491b1155fb33e2f2382d516b58b8da2c7061465bc4eda15039dc5ea6f4757d475f319acf4d3e1fe2c24824c0777658d8de9f0992aa561473692c36cddb4ebbbb186b53113ea4ce87f1f8ca32e68e44cedc1d769681a518b7890e2c2ae63adad2f6cc61c60c50ed4d9968e61a611483ab6b8c0fbd57811c13e8636e65979ffe32f49d8addafc17c1fa411f8b125b831347db7d5c04619c9cde767eb0f5c50cd2f8cd777493f386e671e40caa696159e48d86bc05673eec5fbae947ee427b332e53939ba83d8a2f8b6498ae3a248f29b4c6ccf1e9af5649cc595d3a9bde1b39d57642c3b7ac9cda9e76757c9e5544de5c9ee5775d240bdeca5ca3d46f76b6b8f5818e6ee0bbddc6593f09cc0b2ed57b162b264e275881c3228ee3c9357122265843e1186fc33ffc9fe5ee2ba45d5403f7846e98e9356d32ee1ab09fc38e15d2ee4bfacfbe14f54ed49ed2195df82b2fcbb7462573f2b7406fcd0fc6487b3b38e0edddf5e122ebfb3a25b47bb76a624a8fe8fb677df7eb82ac38f04afcf68cffaedd597cce5dd087f844806f3bfa77d829eb4f92b8eb2efde5dceae6ff0f8176cf2ebae4ff9471efeffd2b67c240877572875a4494766a676774d1a03d08dd1b08ac1e08a03d412a6401c66921718c312184f2651c76b762b1f182b6e183b34b6b18357418196da6d910b6761a28db62813a6628a08c31ca6928db6c66f96d763b6a18238728b31fa61b6f761b13b6ea6981918a21d38e38018eb6948776b48296d48dd7f48c48158047392004758395b315582585471b7e58e97c38c588b74c4b97ee12084f5b126683b2b58368468d17b68e369d6017ed1178987611e68f68511422c01278c681b78e6678d68978e953f3288768088a23788848488588568b8d786f6098a88298a31d88e88078498f78e97188998921698035f88988888b983982a8c88f98fd48986a8e787d7c986a8e988a89a8b78b88ca8ae7ea84a8011045f141b89241a88b8a98da85a8fb8e013a5bb8cb81336889985b8701e78c78fa8d016557956c87c8e336881e1f33ac88370260d86369c43d84d8d77d173d4bc87b22670f3f01795dd8fd80e8f81958d24a343781364c8dd8145be8ce8871358921c65af16f87f8f519f8821ef4755009409509601045101000b3
+-- </COVER>
 
