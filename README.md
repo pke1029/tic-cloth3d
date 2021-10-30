@@ -1,1 +1,2 @@
-# tic-cloth3d
+#3D cloth simulator in TIC-80
+
